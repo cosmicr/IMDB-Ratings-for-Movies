@@ -1,0 +1,8 @@
+[B]Version 1.2[/B]
+
+Fixed minor errors and bugs
+Fixed Eden compatibility
+Fixed non-ascii characters in titles
+Fixed IMDB scraping (it now spoofs the browser version)
+
+Gets latest database independent of version

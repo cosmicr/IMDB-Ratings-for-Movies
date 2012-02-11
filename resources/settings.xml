@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings>
+    <setting id="instruct" type="text" label="30001" enable="false" />
+    <setting id="clean" type="bool" label="30002" default="false" />
+    <setting id="instruct" type="text" label="30003" enable="false" />
+    <setting id="database" type="enum" values="SQLite|MySQL" label="30004" default="SQLite"/>
+</settings>

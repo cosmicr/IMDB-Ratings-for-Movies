@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<strings>
+    <!-- Plugin settings -->
+    <string id="30001">Uncheck to update only new movies.</string>
+    <string id="30002">Update all movies</string>
+    <string id="30003">Please leave this setting if you don't know what it means.</string>
+    <string id="30004">Database type(not yet functional)</string>
+</strings>

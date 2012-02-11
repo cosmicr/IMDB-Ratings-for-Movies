@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.imdbratings"
+    name="IMDB Ratings" version="1.2" provider-name="cosmicr">
+  <requires>
+    <import addon="xbmc.python" version="1.0"/>
+    <import addon="xbmc.gui" version="2.11"/>
+  </requires>
+  <extension point="xbmc.python.script" library="default.py">
+    <provides>executable</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en">Get movie ratings from IMDB instead of regular scraper.</summary>
+    <description lang="en">The default movie scraper, themoviedb, is lacking in the ratings. IMDB contains much better ratings for movies.
+
+This script when run will go through your movie library and update the movies ratings whilst keeping all the other meta data from themoviedb.
+
+Please read the readme.txt included with this addon.</description>
+    <platform>all</platform>
+  </extension>
+</addon>

@@ -1,0 +1,1 @@
+/usr/share/pyshared/MySQLdb/constants/ER.py
