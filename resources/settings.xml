@@ -4,4 +4,5 @@
     <setting id="clean" type="bool" label="30002" default="false" />
     <setting id="instruct" type="text" label="30003" enable="false" />
     <setting id="database" type="enum" values="SQLite|MySQL" label="30004" default="SQLite"/>
+    <setting id="dbloc" type="ipaddress" label="30005" enable="eq(-1,1)" />
 </settings>

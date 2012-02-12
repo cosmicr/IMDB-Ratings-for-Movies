@@ -14,37 +14,24 @@ import xbmcgui
 import xbmcaddon
 
 '''setup some general variables'''
+#this is used for output to the debug log
+d_error = "IMDB Rating Script ERROR: "
+d_notify = "IMDB Rating Script: "
+
 #this is used to easily get settings
 Addon = xbmcaddon.Addon(id='script.imdbratings')
 
 #the path to the script
 script_path = Addon.getAddonInfo('path')
 
-#for MySQL
-sys.path.append( os.path.join(script_path, "resources/lib") ) 
-import MySQLdb as mdb
+#the path to the file with the last updated imdb id
+lastupdated = os.path.join(script_path, "resources/lastid.dat")
 
 #the path to the imdb icon
 logoicon = os.path.join (script_path , "resources/images/logo.png")
 
 #the path to the database
 database_path = os.path.join(script_path, "../../userdata/Database")
-#the database filename
-try: 
-	filelist = os.listdir(database_path) #get a directory listing
-except Exception, inst:
-	print d_error + "Unable to find database file in " + database_path
-	sys.exit()
-databases = [] #an empty array
-for f in filelist:
-	if f.startswith('MyVideo') and f.endswith('.db'): #check for valid database names
-		databases.append(f) #add it to the array
-databases.sort() #sort the list of database file(s)
-filename = databases.pop() #get the last one since it should be the latest
-database = os.path.join(script_path, database_path, filename) #put the paths all together
-
-#the path to the file with the last updated imdb id
-lastupdated = os.path.join(script_path, "resources/lastid.dat")
 
 # The url in which to find the imdb data
 Base_URL = "http://www.imdb.com/title/"
@@ -52,30 +39,82 @@ Base_URL = "http://www.imdb.com/title/"
 #for spoofing imdb
 headers = { 'User-Agent' : 'Mozilla/5.0' }
 
-#this is used for output to the debug log
-d_error = "IMDB Rating Script ERROR: "
-d_notify = "IMDB Rating Script: "
-
 #notify the user
-xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,Beginning update - this may take some time...,'+logoicon+')') 
+xbmc.executebuiltin('xbmc.Notification(IMDB Ratings Beginning Update,This may take some time...,10000,'+logoicon+')') 
+
+#what database type are we working with?
+MySQL = int(Addon.getSetting("database"))
+print d_notify + "Database type is set to " + ("MySQL" if MySQL else "SQLite")
+if MySQL:
+  MySQL_Address = Addon.getSetting("dbloc")
+  if MySQL_Address.startswith("0."):
+    print d_error + "MySQL Server Addres not set correctly"
+    sys.exit()
+  else:
+    print d_notify + "MySQL Server Address is " + MySQL_Address
+  dialog = xbmcgui.Dialog()
+  if not dialog.yesno('Warning', 'Please ensure you have a backup of your database','as MySQL functionality is experimental.','Do you want to continue?'):
+    sys.exit()
+
+#for MySQL
+sys.path.append( os.path.join(script_path, "resources/lib") ) 
+import MySQLdb as mdb
+
+#find the database name
+databases = [] #an empty array
+if not MySQL:
+  try: 
+    filelist = os.listdir(database_path) #get a directory listing
+  except Exception, inst:
+    print d_error + "Unable to find database file in " + database_path
+    sys.exit()
+  for f in filelist:
+    if f.startswith('MyVideo') and f.endswith('.db'): #check for valid database names
+	  databases.append(f) #add it to the array
+  databases.sort() #sort the list of database file(s)
+  filename = databases.pop() #get the last one since it should be the latest
+  database = os.path.join(script_path, database_path, filename) #put the paths all together
+else: #find mysql db name
+  try:
+    conn = mdb.connect(MySQL_Address, 'xbmc', 'xbmc')
+  except:
+    print d_error + "Couldn't connect to database. Check the ip address is correct."
+    xbmc.executebuiltin("xbmc.Notification(IMDB Ratings,Couldn't connect to database,5000,"+logoicon+")") 
+    sys.exit()
+  c = conn.cursor()
+  c.execute("show databases")
+  dblist = []
+  for f in c.fetchall():
+    dblist.extend(list(f))
+  for f in dblist:
+    if f.startswith('MyVideo'):
+      databases.append(f)
+  databases.sort()
+  database = databases.pop()
+  print d_notify + "db name is " + database
+  q = "USE " + database
+  c.execute(q)
+
 
 '''backup the database'''
-databasebackup = database + ".bak." + time.strftime("%Y%m%d-%H%M",time.localtime())
-try:
-	shutil.copy(database, databasebackup)
-#if it doesnt work we want to stop the script
-except IOError as (errno, strerror):
-	print d_error + "Error backing up database: I/O error({0}): {1}".format(errno, strerror)
-	print d_error + "I was trying to save it to " + databasebackup
-	sys.exit()
+if not MySQL:
+  databasebackup = database + ".bak." + time.strftime("%Y%m%d-%H%M",time.localtime())
+  try:
+    shutil.copy(database, databasebackup)
+  #if it doesnt work we want to stop the script
+  except IOError as (errno, strerror):
+    print d_error + "Error backing up database: I/O error({0}): {1}".format(errno, strerror)
+    print d_error + "I was trying to save it to " + databasebackup
+    sys.exit()
 	
 #so far so good!
-print d_notify + "Database backed up to " + databasebackup
+  print d_notify + "Database backed up to " + databasebackup
 print d_notify + "So far so good!"
 
 #check if we need to do the whole library (ie clean is set in the settings)
 if(Addon.getSetting("clean")=="true"):
 	lastid = 0
+	Addon.setSetting("clean", "false")
 else:
 	try:
 		f = open(lastupdated,'r')
@@ -91,15 +130,17 @@ else:
 	print d_notify + "Getting ratings for new movies in library starting at id " + str(lastid) + "..."
 
 '''get the movies'''
-try: 
-	conn = sqlite3.connect(database)
-except:
-	print d_error + "Couldn't connect to database!"
-	sys.exit()
+if not MySQL:
+  try: 
+    conn = sqlite3.connect(database)
+  except:
+    print d_error + "Couldn't connect to database!"
+    sys.exit()
+  c = conn.cursor()
 
 #get all the imdb id's from each movie
-c = conn.cursor()
-c.execute('SELECT c09, c00, idMovie FROM movie WHERE idMovie > ?',(lastid,)) #c09 = imdb id, c00 = the title, idMovie = the internal id
+q = 'SELECT c09, c00, idMovie FROM movie WHERE idMovie > ' + str(lastid)
+c.execute(q) #c09 = imdb id, c00 = the title, idMovie = the internal id
 num_movies = 0 # number of movies, duh
 #empty arrays for the movie metadata
 imdbid = []
@@ -133,16 +174,20 @@ if (num_movies):
 			WebSock.close() #close the connection
 			rating = re.compile('([0-9]\.[0-9])\/10').findall(WebHTML) #regular expression to find the rating
 			votes = re.compile('([0-9]{1,3}[,]*[0-9]{1,3}) votes').findall(WebHTML) #regular expression to find the number of votes
-			top250 = re.compile('Top 250: #([0-9]{1,3})').findall(WebHTML) #regular expression to find the top250 (if it's there)
+			top250 = re.compile('Top 250 #([0-9]{1,3})').findall(WebHTML) #regular expression to find the top250 (if it's there)
 			string =  d_notify + title[j] + "(" + str(lid[j]) + ")" + " rating: " + str(rating[0]) + "/10"
 			print string.encode("ascii", "ignore") #update the log
-			xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,'+title[j].encode("ascii", "ignore")+','+logoicon+')') #tell the user which movie
+			xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,'+title[j].encode("ascii", "ignore")+',1000,'+logoicon+')') #tell the user which movie
 			if(rating):
-				c.execute('UPDATE movie SET c05 = ? WHERE idMovie = ?',(str(rating[0]), str(lid[j]),))
+				q = 'UPDATE movie SET c05 = ' + str(rating[0]) + ' WHERE idMovie = ' + str(lid[j])
+				c.execute(q)
 				if(votes):
-					c.execute('UPDATE movie SET c04 = ? WHERE idMovie = ?',(str(votes[0]), str(lid[j]),))
+					q = 'UPDATE movie SET c04 = "' + str(votes[0]) + '" WHERE idMovie = ' + str(lid[j])
+					c.execute(q)
 				if(top250):
-					c.execute('UPDATE movie SET c13 = ? WHERE idMovie = ?',(str(top250[0]), str(lid[j]),))
+					print d_notify + "Top #250: " + str(top250[0])
+					q = 'UPDATE movie SET c13 = "' + str(top250[0])  + '" WHERE idMovie =  ' + str(lid[j])
+					c.execute(q)
 			j = j + 1
 
 	#commit the updates to the database
@@ -156,22 +201,6 @@ else:
 
 print d_notify + "Ratings script complete."
 
-xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,Update Complete'+','+logoicon+')') 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,Update Complete,5000,'+logoicon+')') 
 
 

@@ -1,8 +1,6 @@
-[B]Version 1.2[/B]
+[B]Version 1.3[/B]
 
-Fixed minor errors and bugs
-Fixed Eden compatibility
-Fixed non-ascii characters in titles
-Fixed IMDB scraping (it now spoofs the browser version)
+Added MySQL Support - see addon settings
 
-Gets latest database independent of version
+Fixed Top 250 regular expression
+Fixed icon not showing in notifications
