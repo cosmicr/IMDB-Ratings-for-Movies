@@ -2,22 +2,13 @@ import os #for file listing
 import time #for timestamp
 import sys #for pathing and stuff
 import urllib, urllib2 #for opening the website
-import re #regular expressions
-import shutil #for copying the database
-try:
-    import sqlite3
-except:
-    from pysqlite2 import dbapi2 as sqlite3
+import simplejson #for json api
 
 import xbmc
 import xbmcgui
 import xbmcaddon
 
 '''setup some general variables'''
-#this is used for output to the debug log
-d_error = "IMDB Rating Script ERROR: "
-d_notify = "IMDB Rating Script: "
-
 #this is used to easily get settings
 Addon = xbmcaddon.Addon(id='script.imdbratings')
 
@@ -30,177 +21,112 @@ lastupdated = os.path.join(script_path, "resources/lastid.dat")
 #the path to the imdb icon
 logoicon = os.path.join (script_path , "resources/images/logo.png")
 
-#the path to the database
-database_path = os.path.join(script_path, "../../userdata/Database")
+#this is used for output to the debug log
+def lognotify(message):
+    xbmc.log(u'IMDB Rating Script: %s' % message)
+def logerror(message):
+    xbmc.log(u'IMDB Rating Script ERROR: %s' % message)
 
-# The url in which to find the imdb data
-Base_URL = "http://www.imdb.com/title/"
+'''functions used for output to the user'''
+#localised strings, set in strings.xml
+STRINGS = {
+    'beginning_update': 30010,
+    'update_complete': 30011,
+    'rating': 30012,
+    'imdb_ratings_update': 30013,
+    'you_have_more_than_fifty_movies_to_update': 30014,
+    'are_you_sure_you_want_to_continue': 30015,
+}
 
-#for spoofing imdb
-headers = { 'User-Agent' : 'Mozilla/5.0' }
+#get the correct string for this user's localisation    
+def _(string_id):
+    if string_id in STRINGS:
+        return Addon.getLocalizedString(STRINGS[string_id])
+    else:
+        logerror('String is missing: %s' % string_id)
+        return string_id
+    
+#notification function
+def notify(message):
+    xbmc.executebuiltin('xbmc.Notification('+message+',6000,'+logoicon+')') 
 
-#notify the user
-xbmc.executebuiltin('xbmc.Notification(IMDB Ratings Beginning Update,This may take some time...,10000,'+logoicon+')') 
+    
+'''main routine'''
+def main():
+    #check if we need to do the whole library (ie clean is set in the settings)
+    if(Addon.getSetting("clean")=="true"):
+        lastid = 0
+        Addon.setSetting("clean", "false")
+    else:
+        try:
+            f = open(lastupdated,'r')
+            lastid = f.read()
+            f.close()
+        except IOError:
+            lognotify("lastid.dat doesnt exist. This is normal on first run.")
+            lastid = 0
 
-#what database type are we working with?
-MySQL = int(Addon.getSetting("database"))
-print d_notify + "Database type is set to " + ("MySQL" if MySQL else "SQLite")
-if MySQL:
-  MySQL_Address = Addon.getSetting("dbloc")
-  if MySQL_Address.startswith("0."):
-    print d_error + "MySQL Server Addres not set correctly"
-    sys.exit()
-  else:
-    print d_notify + "MySQL Server Address is " + MySQL_Address
-  dialog = xbmcgui.Dialog()
-  if not dialog.yesno('Warning', 'Please ensure you have a backup of your database','as MySQL functionality is experimental.','Do you want to continue?'):
-    sys.exit()
+    if (lastid==0):
+        lognotify("Getting ratings for all movies in library...")
+    else:
+        lognotify("Getting ratings for new movies in library starting at id " + str(lastid) + "...")
 
-#for MySQL
-sys.path.append( os.path.join(script_path, "resources/lib") ) 
-import MySQLdb as mdb
+    '''get the movies'''
+    command='{"jsonrpc": "2.0", "method": "VideoLibrary.GetMovies", "params": {"properties" : ["rating", "imdbnumber", "votes", "top250", "year"] }, "id": 1}'
+    result = xbmc.executeJSONRPC( command )
+    result = unicode(result, 'ascii', errors='ignore')
+    jsonobject = simplejson.loads(result)
+    movies = jsonobject["result"]["movies"]
 
-#find the database name
-databases = [] #an empty array
-if not MySQL:
-  try: 
-    filelist = os.listdir(database_path) #get a directory listing
-  except Exception, inst:
-    print d_error + "Unable to find database file in " + database_path
-    sys.exit()
-  for f in filelist:
-    if f.startswith('MyVideo') and f.endswith('.db'): #check for valid database names
-	  databases.append(f) #add it to the array
-  databases.sort() #sort the list of database file(s)
-  filename = databases.pop() #get the last one since it should be the latest
-  database = os.path.join(script_path, database_path, filename) #put the paths all together
-else: #find mysql db name
-  try:
-    conn = mdb.connect(MySQL_Address, 'xbmc', 'xbmc')
-  except:
-    print d_error + "Couldn't connect to database. Check the ip address is correct."
-    xbmc.executebuiltin("xbmc.Notification(IMDB Ratings,Couldn't connect to database,5000,"+logoicon+")") 
-    sys.exit()
-  c = conn.cursor()
-  c.execute("show databases")
-  dblist = []
-  for f in c.fetchall():
-    dblist.extend(list(f))
-  for f in dblist:
-    if f.startswith('MyVideo'):
-      databases.append(f)
-  databases.sort()
-  database = databases.pop()
-  print d_notify + "db name is " + database
-  q = "USE " + database
-  c.execute(q)
+    #time to update the movies
+    numupdated = 0
+    lastupdatedid = lastid
+    for index, movie in enumerate(movies):
+        if int(movie['movieid']) > int(lastid)-1:
+            movies = movies[index+1:]
+            break
+    lognotify("Number of movies to update: " + str(len(movies)))
+    if(len(movies)>60):
+        dialog = xbmcgui.Dialog()
+        if(dialog.yesno(_('imdb_ratings_update'), _('you_have_more_than_fifty_movies_to_update'),_('are_you_sure_you_want_to_continue'))==False):
+            return
+    pDialog = xbmcgui.DialogProgress()
+    pDialog.create(_('imdb_ratings_update'), _('beginning_update'))
+    for movie in movies:
+        if (pDialog.iscanceled()): break
+        lastupdatedid = movie['movieid']
+        if movie['imdbnumber'] == "":
+            logerror(movie['label'] + " doesn't have an imdb number in the database - using manual search.")
+            url = "http://www.omdbapi.com/?t=" + urllib.quote(movie['label']) + "&y=" + str(movie['year'])
+            lognotify(url)
+        else:
+            url = "http://www.omdbapi.com/?i=" + movie['imdbnumber']
+        imdbdata = simplejson.load(urllib2.urlopen(url))
+        if imdbdata['Response'] == 'False':
+            logerror("Oops! That Didn't work! Skipping this movie")
+            continue
+        movieid = str(movie['movieid'])
+        rating = str(imdbdata["imdbRating"])
+        votes = str(imdbdata["imdbVotes"])
+        command='{"jsonrpc": "2.0", "method": "VideoLibrary.SetMovieDetails", "params": { "movieid" : ' + movieid + ', "rating" : '+ rating + ', "votes" : "' + votes + '"}, "id": 2}'
+        result = xbmc.executeJSONRPC( command )
+        #lognotify the user
+        percent = (float(numupdated)/len(movies))*100
+        pDialog.update(percent,_('beginning_update'),movie['label'],_('rating')+rating)
+        numupdated = numupdated + 1
 
+    #write out the last id updated
+    if lastupdatedid == lastid:
+        lognotify("Nothing to update.")
+    else:
+        file( lastupdated , "w" ).write(str(lastupdatedid))
+        lognotify("Wrote out lastid as "+str(lastupdatedid) + " (updated " + str(numupdated) + " movies)")
 
-'''backup the database'''
-if not MySQL:
-  databasebackup = database + ".bak." + time.strftime("%Y%m%d-%H%M",time.localtime())
-  try:
-    shutil.copy(database, databasebackup)
-  #if it doesnt work we want to stop the script
-  except IOError as (errno, strerror):
-    print d_error + "Error backing up database: I/O error({0}): {1}".format(errno, strerror)
-    print d_error + "I was trying to save it to " + databasebackup
-    sys.exit()
-	
-#so far so good!
-  print d_notify + "Database backed up to " + databasebackup
-print d_notify + "So far so good!"
+    pDialog.close()
+    lognotify("Ratings script complete.")
 
-#check if we need to do the whole library (ie clean is set in the settings)
-if(Addon.getSetting("clean")=="true"):
-	lastid = 0
-	Addon.setSetting("clean", "false")
-else:
-	try:
-		f = open(lastupdated,'r')
-		lastid = f.read()
-		f.close()
-	except IOError:
-		print d_notify + "lastid.dat doesnt exist. This is normal on first run."
-		lastid = 0
+    notify(_('update_complete'))
 
-if (lastid==0):
-	print d_notify + "Getting ratings for all movies in library..."
-else:
-	print d_notify + "Getting ratings for new movies in library starting at id " + str(lastid) + "..."
-
-'''get the movies'''
-if not MySQL:
-  try: 
-    conn = sqlite3.connect(database)
-  except:
-    print d_error + "Couldn't connect to database!"
-    sys.exit()
-  c = conn.cursor()
-
-#get all the imdb id's from each movie
-q = 'SELECT c09, c00, idMovie FROM movie WHERE idMovie > ' + str(lastid)
-c.execute(q) #c09 = imdb id, c00 = the title, idMovie = the internal id
-num_movies = 0 # number of movies, duh
-#empty arrays for the movie metadata
-imdbid = []
-title = []
-lid = []
-for row in c:
-	if (row[0]==''):
-		print d_notify + row[1] + " doesnt seem have an IMDB id!!!"
-	else:
-		imdbid.append(row[0])
-		title.append(row[1])
-		lid.append(row[2])
-		num_movies = num_movies + 1
-	lastid = row[2]
-
-#okay, lets update the movies
-j = 0 #an index for the movies in the database
-if (num_movies):
-	print d_notify + str(num_movies) + " Movies to update"
-	for num in imdbid:
-		if (num):		
-			print d_notify + "Opening " + Base_URL + num
-			try:
-				req = urllib2.Request(Base_URL+num, None, headers) #merge the header with the url
-				WebSock = urllib2.urlopen(req) #open the url to the movie
-			except:
-				print d_error + "Couldn't open url (probably timed out)."
-				xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,COULDNT OPEN URL)') 
-				break;
-			WebHTML = WebSock.read() #get the data from the webpage
-			WebSock.close() #close the connection
-			rating = re.compile('([0-9]\.[0-9])\/10').findall(WebHTML) #regular expression to find the rating
-			votes = re.compile('([0-9]{1,3}[,]*[0-9]{1,3}) votes').findall(WebHTML) #regular expression to find the number of votes
-			top250 = re.compile('Top 250 #([0-9]{1,3})').findall(WebHTML) #regular expression to find the top250 (if it's there)
-			string =  d_notify + title[j] + "(" + str(lid[j]) + ")" + " rating: " + str(rating[0]) + "/10"
-			print string.encode("ascii", "ignore") #update the log
-			xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,'+title[j].encode("ascii", "ignore")+',1000,'+logoicon+')') #tell the user which movie
-			if(rating):
-				q = 'UPDATE movie SET c05 = ' + str(rating[0]) + ' WHERE idMovie = ' + str(lid[j])
-				c.execute(q)
-				if(votes):
-					q = 'UPDATE movie SET c04 = "' + str(votes[0]) + '" WHERE idMovie = ' + str(lid[j])
-					c.execute(q)
-				if(top250):
-					print d_notify + "Top #250: " + str(top250[0])
-					q = 'UPDATE movie SET c13 = "' + str(top250[0])  + '" WHERE idMovie =  ' + str(lid[j])
-					c.execute(q)
-			j = j + 1
-
-	#commit the updates to the database
-	conn.commit()
-	c.close()     
-	#write out the last id updated
-	file( lastupdated , "w" ).write(str(lid[j-1]))
-	print d_notify + "Wrote out lastid as "+str(lid[j-1]) + " (updated " + str(j) + " movies)"
-else:
-	print d_notify + "Nothing to update"
-
-print d_notify + "Ratings script complete."
-
-xbmc.executebuiltin('xbmc.Notification(IMDB Ratings,Update Complete,5000,'+logoicon+')') 
-
+if __name__ == '__main__':
+    main()
 

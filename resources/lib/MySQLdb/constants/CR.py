@@ -1,1 +1,0 @@
-/usr/share/pyshared/MySQLdb/constants/CR.py

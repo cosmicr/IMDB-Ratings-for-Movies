@@ -3,7 +3,13 @@
     <!-- Plugin settings -->
     <string id="30001">Uncheck to update only new movies.</string>
     <string id="30002">Update all movies</string>
-    <string id="30003">Please leave this setting if you don't know what it means.</string>
-    <string id="30004">Database type(not yet functional)</string>
-    <string id="30005">MySQL Server Address</string>
+    
+	<!-- Strings for dialogs -->
+	<string id="30010">Updating rating for movie</string>
+	<string id="30011">IMDB Ratings,Update Complete</string>
+	<string id="30012">Rating: </string>
+	<string id="30013">IMDB Ratings Update</string>
+	<string id="30014">You have more than 50 movies to update.</string>
+	<string id="30015">Are you sure you want to continue?</string>
+	
 </strings>

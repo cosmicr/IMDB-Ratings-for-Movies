@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="script.imdbratings"
-    name="IMDB Ratings" version="1.3" provider-name="cosmicr">
+    name="IMDB Ratings" version="2.0" provider-name="cosmicr">
   <requires>
-    <import addon="xbmc.python" version="1.0"/>
-    <import addon="xbmc.gui" version="2.11"/>
+    <import addon="xbmc.python" version="2.1.0"/>
+    <import addon="xbmc.gui" version="4.0.0"/>
   </requires>
   <extension point="xbmc.python.script" library="default.py">
     <provides>executable</provides>

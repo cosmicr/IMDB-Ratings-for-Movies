@@ -1,6 +1,8 @@
-[B]Version 1.3[/B]
+[B]Version 2.0[/B]
 
-Added MySQL Support - see addon settings
+Now working in Frodo.
+Complete re-write using XBMC's JSON RCP API.
+Script now uses omdbapi.com instead of the actual IMDB site, unfortunately this means no more top250 votes for now.
 
-Fixed Top 250 regular expression
-Fixed icon not showing in notifications
+Added progress meter, and warning for larger libraries. 
+Still a bit more cleanup of code to do.
